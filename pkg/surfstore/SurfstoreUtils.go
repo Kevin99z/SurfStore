@@ -25,7 +25,11 @@ func pullFile(client RPCClient, remoteMeta *FileMetaData, localMeta *FileMetaDat
 	blocks := make([]Block, len(remoteMeta.BlockHashList))
 	for i, hash := range remoteMeta.BlockHashList {
 		if hash == TOMBSTONE_HASHVALUE { // deleted file
-			break
+			os.Remove(path.Join(client.BaseDir, remoteMeta.Filename))
+			localMeta.Version = remoteMeta.Version
+			localMeta.BlockHashList = remoteMeta.BlockHashList
+			wg.Done()
+			return
 		}
 		err := client.GetBlock(hash, blockStoreAddr, &blocks[i])
 		if err != nil {
