@@ -5,12 +5,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 /* Hash Related */
@@ -57,6 +55,7 @@ func WriteMetaFile(fileMetas map[string]*FileMetaData, baseDir string) error {
 	if err != nil {
 		log.Fatal("Error During Meta Write Back")
 	}
+	defer db.Close()
 	statement, err := db.Prepare(createTable)
 	if err != nil {
 		log.Fatal("Error During Meta Write Back")
@@ -71,7 +70,7 @@ func WriteMetaFile(fileMetas map[string]*FileMetaData, baseDir string) error {
 			stmt.Exec(fileName, fileMeta.Version, hashIndex, hashValue)
 		}
 	}
-	return db.Close()
+	return nil
 }
 
 /*
@@ -95,20 +94,21 @@ func LoadMetaFromMetaFile(baseDir string) (fileMetaMap map[string]*FileMetaData,
 	if err != nil {
 		log.Fatal("Error When Opening Meta")
 	}
+	defer db.Close()
 	rows, err := db.Query(`select fileName, version, hashIndex, hashValue from indexes`)
 	var fileName string
 	var version int32
 	var hashIndex int
-	var hashValue int
+	var hashValue string
 	for rows.Next() {
 		rows.Scan(&fileName, &version, &hashIndex, &hashValue)
 		if fileMetaData, ok := fileMetaMap[fileName]; ok {
-			fileMetaData.BlockHashList = append(fileMetaData.BlockHashList, strconv.Itoa(hashValue))
+			fileMetaData.BlockHashList = append(fileMetaData.BlockHashList, hashValue)
 		} else {
 			fileMetaData = &FileMetaData{
 				Filename:      fileName,
 				Version:       version,
-				BlockHashList: []string{},
+				BlockHashList: []string{hashValue},
 			}
 			fileMetaMap[fileName] = fileMetaData
 		}

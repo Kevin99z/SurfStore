@@ -45,7 +45,7 @@ func pullFile(client RPCClient, remoteMeta *FileMetaData, localMeta *FileMetaDat
 
 func pushFile(client RPCClient, localMeta *FileMetaData, blockStoreAddr string, w_chan chan<- string) {
 	success := true
-	if localMeta.BlockHashList[0] != TOMBSTONE_HASHVALUE { //push file blocks if it exists
+	if strings.Join(localMeta.BlockHashList, HASH_DELIMITER) != TOMBSTONE_HASHVALUE { //push file blocks if it exists
 		txt, err := os.ReadFile(path.Join(client.BaseDir, localMeta.Filename))
 		if err != nil {
 		}
@@ -91,7 +91,7 @@ func ClientSync(client RPCClient) {
 	// calculate hashes for each file
 	localFileHashList := make(map[string][]string)
 	for _, file := range files {
-		if file.IsDir() || file.Name() == "index.db" {
+		if file.IsDir() || file.Name() == "index.db" || strings.Contains(file.Name(), ",") {
 			continue
 		}
 		path := path.Join(baseDir, file.Name())
@@ -124,7 +124,7 @@ func ClientSync(client RPCClient) {
 	}
 	// check deleted files
 	for fileName, localMeta := range localFileMetaMap {
-		if _, exist := localFileHashList[fileName]; !exist {
+		if _, exist := localFileHashList[fileName]; !exist && strings.Join(localMeta.BlockHashList, HASH_DELIMITER) != TOMBSTONE_HASHVALUE {
 			modifiedFiles[fileName] = localMeta.Version + 1
 		}
 	}
