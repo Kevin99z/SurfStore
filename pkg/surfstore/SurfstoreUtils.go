@@ -21,8 +21,16 @@ func min(a int, b int) int {
 }
 
 func pullFile(client RPCClient, remoteMeta *FileMetaData, localMeta *FileMetaData, blockStoreAddr string, wg *sync.WaitGroup) {
+	log.Printf("[Client] Fetching %s from server\n", remoteMeta.Filename)
 	blocks := make([]Block, len(remoteMeta.BlockHashList))
 	for i, hash := range remoteMeta.BlockHashList {
+		if hash == TOMBSTONE_HASHVALUE { // deleted file
+			os.Remove(path.Join(client.BaseDir, remoteMeta.Filename))
+			localMeta.Version = remoteMeta.Version
+			localMeta.BlockHashList = remoteMeta.BlockHashList
+			wg.Done()
+			return
+		}
 		err := client.GetBlock(hash, blockStoreAddr, &blocks[i])
 		if err != nil {
 			log.Println("[client] Error fetching block")
@@ -44,6 +52,7 @@ func pullFile(client RPCClient, remoteMeta *FileMetaData, localMeta *FileMetaDat
 }
 
 func pushFile(client RPCClient, localMeta *FileMetaData, blockStoreAddr string, w_chan chan<- string) {
+	log.Printf("[Client] Pushing %s to server\n", localMeta.Filename)
 	success := true
 	if strings.Join(localMeta.BlockHashList, HASH_DELIMITER) != TOMBSTONE_HASHVALUE { //push file blocks if it exists
 		txt, err := os.ReadFile(path.Join(client.BaseDir, localMeta.Filename))
@@ -63,11 +72,12 @@ func pushFile(client RPCClient, localMeta *FileMetaData, blockStoreAddr string, 
 		var latestVersion int32
 		client.UpdateFile(localMeta, &latestVersion)
 		if latestVersion == -1 { // server has new version of file, needs pull
+			localMeta.Version -= 1
 			w_chan <- localMeta.Filename
 			success = false
+			return
 		}
-	}
-	if !success {
+	} else {
 		localMeta.Version -= 1
 	}
 	w_chan <- ""
