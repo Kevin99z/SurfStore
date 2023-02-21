@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -40,7 +41,7 @@ const createTable string = `create table if not exists indexes (
 		hashValue TEXT
 	);`
 
-const insertTuple string = ``
+const insertTuple string = `insert into indexes (fileName, version, hashIndex, hashValue) VALUES (?,?,?,?);`
 
 // WriteMetaFile writes the file meta map back to local metadata file index.db
 func WriteMetaFile(fileMetas map[string]*FileMetaData, baseDir string) error {
@@ -61,7 +62,16 @@ func WriteMetaFile(fileMetas map[string]*FileMetaData, baseDir string) error {
 		log.Fatal("Error During Meta Write Back")
 	}
 	statement.Exec()
-	panic("todo")
+	stmt, err := db.Prepare(insertTuple)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for fileName, fileMeta := range fileMetas {
+		for hashIndex, hashValue := range fileMeta.BlockHashList {
+			stmt.Exec(fileName, fileMeta.Version, hashIndex, hashValue)
+		}
+	}
+	return db.Close()
 }
 
 /*
@@ -85,7 +95,25 @@ func LoadMetaFromMetaFile(baseDir string) (fileMetaMap map[string]*FileMetaData,
 	if err != nil {
 		log.Fatal("Error When Opening Meta")
 	}
-	panic("todo")
+	rows, err := db.Query(`select fileName, version, hashIndex, hashValue from indexes`)
+	var fileName string
+	var version int32
+	var hashIndex int
+	var hashValue int
+	for rows.Next() {
+		rows.Scan(&fileName, &version, &hashIndex, &hashValue)
+		if fileMetaData, ok := fileMetaMap[fileName]; ok {
+			fileMetaData.BlockHashList = append(fileMetaData.BlockHashList, strconv.Itoa(hashValue))
+		} else {
+			fileMetaData = &FileMetaData{
+				Filename:      fileName,
+				Version:       version,
+				BlockHashList: []string{},
+			}
+			fileMetaMap[fileName] = fileMetaData
+		}
+	}
+	return fileMetaMap, nil
 }
 
 /*
