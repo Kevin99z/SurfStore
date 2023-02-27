@@ -40,7 +40,7 @@ const createTable string = `create table if not exist index (
 		hashValue TEXT
 	);`
 
-const insertTuple string = ``
+const insertTuple string = `insert into index (fileName, version, hashIndex, hashValue) VALUES (?,?,?,?);`
 
 // WriteMetaFile writes the file meta map back to local metadata file index.db
 func WriteMetaFile(fileMetas map[string]*FileMetaData, baseDir string) error {
@@ -56,12 +56,22 @@ func WriteMetaFile(fileMetas map[string]*FileMetaData, baseDir string) error {
 	if err != nil {
 		log.Fatal("Error During Meta Write Back")
 	}
+	defer db.Close()
 	statement, err := db.Prepare(createTable)
 	if err != nil {
 		log.Fatal("Error During Meta Write Back")
 	}
 	statement.Exec()
-	panic("todo")
+	stmt, err := db.Prepare(insertTuple)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for fileName, fileMeta := range fileMetas {
+		for hashIndex, hashValue := range fileMeta.BlockHashList {
+			stmt.Exec(fileName, fileMeta.Version, hashIndex, hashValue)
+		}
+	}
+	return nil
 }
 
 /*
@@ -85,7 +95,26 @@ func LoadMetaFromMetaFile(baseDir string) (fileMetaMap map[string]*FileMetaData,
 	if err != nil {
 		log.Fatal("Error When Opening Meta")
 	}
-	panic("todo")
+	defer db.Close()
+	rows, err := db.Query(`select fileName, version, hashIndex, hashValue from indexes`)
+	var fileName string
+	var version int32
+	var hashIndex int
+	var hashValue string
+	for rows.Next() {
+		rows.Scan(&fileName, &version, &hashIndex, &hashValue)
+		if fileMetaData, ok := fileMetaMap[fileName]; ok {
+			fileMetaData.BlockHashList = append(fileMetaData.BlockHashList, hashValue)
+		} else {
+			fileMetaData = &FileMetaData{
+				Filename:      fileName,
+				Version:       version,
+				BlockHashList: []string{hashValue},
+			}
+			fileMetaMap[fileName] = fileMetaData
+		}
+	}
+	return fileMetaMap, nil
 }
 
 /*
