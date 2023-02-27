@@ -44,12 +44,17 @@ func (bs *BlockStore) HasBlocks(ctx context.Context, blockHashesIn *BlockHashes)
 		bs.lock.Unlock()
 	}
 	return &BlockHashes{Hashes: res}, nil
-	panic("todo")
 }
 
 // Return a list containing all blockHashes on this block server
 func (bs *BlockStore) GetBlockHashes(ctx context.Context, _ *emptypb.Empty) (*BlockHashes, error) {
-	panic("todo")
+	var res []string
+	bs.lock.Lock()
+	for hash, _ := range bs.BlockMap {
+		res = append(res, hash)
+	}
+	bs.lock.Unlock()
+	return &BlockHashes{Hashes: res}, nil
 }
 
 // This line guarantees all method for BlockStore are implemented

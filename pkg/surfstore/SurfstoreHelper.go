@@ -33,14 +33,14 @@ func ConcatPath(baseDir, fileDir string) string {
 	Writing Local Metadata File Related
 */
 
-const createTable string = `create table if not exist index (
+const createTable string = `create table if not exists indexes (
 		fileName TEXT, 
 		version INT,
 		hashIndex INT,
 		hashValue TEXT
 	);`
 
-const insertTuple string = `insert into index (fileName, version, hashIndex, hashValue) VALUES (?,?,?,?);`
+const insertTuple string = `insert into indexes (fileName, version, hashIndex, hashValue) VALUES (?,?,?,?);`
 
 // WriteMetaFile writes the file meta map back to local metadata file index.db
 func WriteMetaFile(fileMetas map[string]*FileMetaData, baseDir string) error {

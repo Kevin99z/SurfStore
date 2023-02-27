@@ -20,24 +20,38 @@ func min(a int, b int) int {
 	}
 }
 
-func pullFile(client RPCClient, remoteMeta *FileMetaData, localMeta *FileMetaData, blockStoreAddr string, wg *sync.WaitGroup) {
+func indexMap(list []string) map[string]int {
+	val2key := make(map[string]int)
+	for key, val := range list {
+		val2key[val] = key
+	}
+	return val2key
+}
+
+func pullFile(client RPCClient, remoteMeta *FileMetaData, localMeta *FileMetaData, wg *sync.WaitGroup) {
 	log.Printf("[Client] Fetching %s from server\n", remoteMeta.Filename)
+	if strings.Join(remoteMeta.BlockHashList, HASH_DELIMITER) == TOMBSTONE_HASHVALUE { // deleted file
+		os.Remove(path.Join(client.BaseDir, remoteMeta.Filename))
+		localMeta.Version = remoteMeta.Version
+		localMeta.BlockHashList = remoteMeta.BlockHashList
+		wg.Done()
+		return
+	}
 	blocks := make([]Block, len(remoteMeta.BlockHashList))
-	for i, hash := range remoteMeta.BlockHashList {
-		if hash == TOMBSTONE_HASHVALUE { // deleted file
-			os.Remove(path.Join(client.BaseDir, remoteMeta.Filename))
-			localMeta.Version = remoteMeta.Version
-			localMeta.BlockHashList = remoteMeta.BlockHashList
-			wg.Done()
-			return
-		}
-		err := client.GetBlock(hash, blockStoreAddr, &blocks[i])
-		if err != nil {
-			log.Println("[client] Error fetching block")
-			wg.Done()
-			return
+	hash2ind := indexMap(remoteMeta.BlockHashList)
+	blockStoreMap := make(map[string][]string)
+	client.GetBlockStoreMap(remoteMeta.BlockHashList, &blockStoreMap)
+	for addr, hashes := range blockStoreMap {
+		for _, hash := range hashes {
+			err := client.GetBlock(hash, addr, &blocks[hash2ind[hash]])
+			if err != nil {
+				log.Println("[client] Error fetching block")
+				wg.Done()
+				return
+			}
 		}
 	}
+
 	os.Remove(path.Join(client.BaseDir, remoteMeta.Filename))
 	f, err := os.OpenFile(path.Join(client.BaseDir, remoteMeta.Filename), os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -52,7 +66,7 @@ func pullFile(client RPCClient, remoteMeta *FileMetaData, localMeta *FileMetaDat
 	wg.Done()
 }
 
-func pushFile(client RPCClient, localMeta *FileMetaData, blockStoreAddr string, w_chan chan<- string) {
+func pushFile(client RPCClient, localMeta *FileMetaData, w_chan chan<- string) {
 	log.Printf("[Client] Pushing %s to server\n", localMeta.Filename)
 	success := true
 	if strings.Join(localMeta.BlockHashList, HASH_DELIMITER) != TOMBSTONE_HASHVALUE { //push file blocks if it exists
@@ -61,10 +75,16 @@ func pushFile(client RPCClient, localMeta *FileMetaData, blockStoreAddr string, 
 		}
 		// push to BlockStore
 		bs := client.BlockSize
-		for i := 0; i < len(txt); i += bs {
-			err := client.PutBlock(&Block{BlockSize: int32(bs), BlockData: txt[i:min(i+bs, len(txt))]}, blockStoreAddr, &success)
-			if err != nil {
-				log.Println("[client] Error pushing block")
+		blockStoreMap := make(map[string][]string)
+		client.GetBlockStoreMap(localMeta.BlockHashList, &blockStoreMap)
+		hash2ind := indexMap(localMeta.BlockHashList)
+		for addr, hashes := range blockStoreMap {
+			for _, hash := range hashes {
+				i := hash2ind[hash] * bs
+				err := client.PutBlock(&Block{BlockSize: int32(bs), BlockData: txt[i:min(i+bs, len(txt))]}, addr, &success)
+				if err != nil {
+					log.Println("[client] Error pushing block")
+				}
 			}
 		}
 	}
@@ -89,11 +109,11 @@ func ClientSync(client RPCClient) {
 	log.Println("[Client] Start Syncing")
 	baseDir := client.BaseDir
 	blockSize := client.BlockSize
-	var blockStoreAddrs []string
-	err := client.GetBlockStoreAddrs(&blockStoreAddrs)
-	if err != nil {
-		log.Fatal(err)
-	}
+	//var blockStoreAddrs []string
+	//err := client.GetBlockStoreAddrs(&blockStoreAddrs)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 	// scan files
 	files, err := os.ReadDir(baseDir)
 	if err != nil {
@@ -102,7 +122,7 @@ func ClientSync(client RPCClient) {
 	// calculate hashes for each file
 	localFileHashList := make(map[string][]string)
 	for _, file := range files {
-		if file.IsDir() || file.Name() == "index.db" || strings.Contains(file.Name(), ",") {
+		if file.IsDir() || file.Name() == DEFAULT_META_FILENAME || strings.Contains(file.Name(), ",") {
 			continue
 		}
 		path := path.Join(baseDir, file.Name())
@@ -155,7 +175,7 @@ func ClientSync(client RPCClient) {
 			newMeta := FileMetaData{Filename: file, Version: 0, BlockHashList: []string{EMPTYFILE_HASHVALUE}}
 			localFileMetaMap[file] = &newMeta
 			wg.Add(1)
-			go pullFile(client, remoteFileMetaMap[file], &newMeta, blockStoreAddrs[0], &wg)
+			go pullFile(client, remoteFileMetaMap[file], &newMeta, &wg)
 		}
 	}
 	wg.Wait()
@@ -172,7 +192,7 @@ func ClientSync(client RPCClient) {
 			newMeta := FileMetaData{Filename: fileName, Version: version, BlockHashList: hashList}
 			localFileMetaMap[fileName] = &newMeta
 			cnt += 1
-			go pushFile(client, &newMeta, blockStoreAddrs[0], bidirect_chan)
+			go pushFile(client, &newMeta, bidirect_chan)
 		}
 	}
 	var filesToPull []string
@@ -194,7 +214,7 @@ func ClientSync(client RPCClient) {
 			newMeta := FileMetaData{Filename: file, Version: 0, BlockHashList: []string{EMPTYFILE_HASHVALUE}}
 			localFileMetaMap[file] = &newMeta
 			wg.Add(1)
-			go pullFile(client, remoteFileMetaMap[file], &newMeta, blockStoreAddrs[0], &wg)
+			go pullFile(client, remoteFileMetaMap[file], &newMeta, &wg)
 		}
 		wg.Wait()
 	}

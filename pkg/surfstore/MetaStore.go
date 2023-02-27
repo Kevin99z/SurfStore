@@ -33,8 +33,20 @@ func (m *MetaStore) UpdateFile(ctx context.Context, fileMetaData *FileMetaData) 
 	}
 }
 
-func (m *MetaStore) GetBlockStoreAddr(ctx context.Context, _ *emptypb.Empty) (*BlockStoreAddrs, error) {
+func (m *MetaStore) GetBlockStoreAddrs(ctx context.Context, _ *emptypb.Empty) (*BlockStoreAddrs, error) {
 	return &BlockStoreAddrs{BlockStoreAddrs: m.BlockStoreAddrs}, nil
+}
+
+func (m *MetaStore) GetBlockStoreMap(ctx context.Context, blockHashesIn *BlockHashes) (*BlockStoreMap, error) {
+	blockStoreMap := make(map[string]*BlockHashes)
+	for _, hash := range blockHashesIn.Hashes {
+		server := m.ConsistentHashRing.GetResponsibleServer(hash)
+		if _, exist := blockStoreMap[server]; !exist {
+			blockStoreMap[server] = &BlockHashes{Hashes: []string{}}
+		}
+		blockStoreMap[server].Hashes = append(blockStoreMap[server].Hashes, hash)
+	}
+	return &BlockStoreMap{BlockStoreMap: blockStoreMap}, nil
 }
 
 // This line guarantees all method for MetaStore are implemented
