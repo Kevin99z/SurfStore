@@ -3,8 +3,11 @@ package surfstore
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
+	"google.golang.org/grpc"
 	"io"
 	"log"
+	"net"
 	"os"
 	"sync"
 )
@@ -33,7 +36,6 @@ func LoadRaftConfigFile(filename string) (cfg RaftConfig) {
 }
 
 func NewRaftServer(id int64, config RaftConfig) (*RaftSurfstore, error) {
-    // TODO Any initialization you need here
 
 	isLeaderMutex := sync.RWMutex{}
 	isCrashedMutex := sync.RWMutex{}
@@ -46,12 +48,24 @@ func NewRaftServer(id int64, config RaftConfig) (*RaftSurfstore, error) {
 		log:            make([]*UpdateOperation, 0),
 		isCrashed:      false,
 		isCrashedMutex: &isCrashedMutex,
+		id:             id,
+		raftAddrs:      config.RaftAddrs,
+		commitIndex:    -1,
+		lastApplied:    -1,
+		nextIndex:      make([]int64, len(config.RaftAddrs)),
+		matchIndex:     make([]int64, len(config.RaftAddrs)),
 	}
 
 	return &server, nil
 }
 
-// TODO Start up the Raft server and any services here
 func ServeRaftServer(server *RaftSurfstore) error {
-    panic("todo")
+	grpcServer := grpc.NewServer()
+	RegisterRaftSurfstoreServer(grpcServer, server)
+	listener, err := net.Listen("tcp", server.raftAddrs[server.id])
+	if err != nil {
+		fmt.Println("Error listening: ", err.Error())
+		return err
+	}
+	return grpcServer.Serve(listener)
 }
