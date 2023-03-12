@@ -104,6 +104,7 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 // of last new entry)
 
 func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInput) (*AppendEntryOutput, error) {
+	fmt.Printf("[Server %d] AppendEntries\n", s.id)
 	if s.isCrashed {
 		return nil, ERR_SERVER_CRASHED
 	}
@@ -142,11 +143,14 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 		ServerId:     s.id,
 		Term:         s.term,
 		Success:      true,
-		MatchedIndex: s.commitIndex,
+		MatchedIndex: int64(len(s.log) - 1),
 	}, nil
 }
 
 func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
+	if s.isCrashed {
+		return nil, ERR_SERVER_CRASHED
+	}
 	s.isLeaderMutex.Lock()
 	s.isLeader = true
 	s.term += 1
@@ -162,6 +166,10 @@ func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Succe
 }
 
 func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
+	fmt.Println("Sending heartbeat")
+	if s.isCrashed {
+		return nil, ERR_SERVER_CRASHED
+	}
 	if !s.isLeader {
 		return &Success{Flag: false}, nil
 	}
@@ -183,7 +191,7 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
 		defer cancel()
-		//fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
+		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
 		resp, err := c.AppendEntries(ctx, &AppendEntryInput{
 			Term:         s.term,
 			PrevLogIndex: prevLogIdx,

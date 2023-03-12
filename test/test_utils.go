@@ -99,8 +99,8 @@ func LoadMetaFromDB(baseDir string) (fileMetaMap map[string]*surfstore.FileMetaD
 	return fileMetaMap, nil
 }
 
-func LoadMetaFromMetaFile(baseDir string) (fileMetaMap map[string]*surfstore.FileMetaData, e error) {
-	metaFilePath, _ := filepath.Abs(ConcatPath(baseDir, DEFAULT_META_FILENAME))
+func LoadMetaFromMetaFile(metaFilePath string) (fileMetaMap map[string]*surfstore.FileMetaData, e error) {
+	//metaFilePath, _ := filepath.Abs(ConcatPath(baseDir, DEFAULT_META_FILENAME))
 
 	fileMetaMap = make(map[string]*surfstore.FileMetaData)
 

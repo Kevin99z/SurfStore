@@ -73,3 +73,67 @@ func TestRaftSetLeader(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateTwice(t *testing.T) {
+	//Setup
+	cfgPath := "./config_files/3nodes.txt"
+	test := InitTest(cfgPath)
+	defer EndTest(test)
+
+	// TEST
+	leaderIdx := 0
+	test.Clients[leaderIdx].SetLeader(test.Context, &emptypb.Empty{})
+
+	// heartbeat
+	for _, server := range test.Clients {
+		server.SendHeartbeat(test.Context, &emptypb.Empty{})
+	}
+
+	for idx, server := range test.Clients {
+		// all should have the leaders term
+		state, _ := server.GetInternalState(test.Context, &emptypb.Empty{})
+		if state == nil {
+			t.Fatalf("Could not get state")
+		}
+		if state.Term != int64(1) {
+			t.Fatalf("Server %d should be in term %d", idx, 1)
+		}
+		if idx == leaderIdx {
+			// server should be the leader
+			if !state.IsLeader {
+				t.Fatalf("Server %d should be the leader", idx)
+			}
+		} else {
+			// server should not be the leader
+			if state.IsLeader {
+				t.Fatalf("Server %d should not be the leader", idx)
+			}
+		}
+	}
+
+	filename := "multi_file.txt"
+	meta_v1, _ := LoadMetaFromMetaFile("./meta_configs/v1.meta")
+	test.Clients[leaderIdx].UpdateFile(test.Context, meta_v1[filename])
+
+	// heartbeat
+	for _, server := range test.Clients {
+		server.SendHeartbeat(test.Context, &emptypb.Empty{})
+	}
+
+	meta_v2, _ := LoadMetaFromMetaFile("./meta_configs/v2.meta")
+	test.Clients[leaderIdx].UpdateFile(test.Context, meta_v2[filename])
+
+	// heartbeat
+	for _, server := range test.Clients {
+		server.SendHeartbeat(test.Context, &emptypb.Empty{})
+	}
+
+	state0, _ := test.Clients[0].GetInternalState(test.Context, &emptypb.Empty{})
+	if (state0.MetaMap.FileInfoMap)[filename].Version != int32(2) {
+		t.Fatalf("Wrong version")
+	}
+	state1, _ := test.Clients[1].GetInternalState(test.Context, &emptypb.Empty{})
+	if (state1.MetaMap.FileInfoMap)[filename].Version != int32(2) {
+		t.Fatalf("Wrong version")
+	}
+}
