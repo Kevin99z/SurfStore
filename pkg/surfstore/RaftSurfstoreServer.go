@@ -96,6 +96,22 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 			success = success || res.Flag
 		}
 	}
+
+	for N := int64(len(s.log) - 1); N > s.commitIndex; N-- {
+		cnt := 0
+		for id, idx := range s.matchIndex {
+			log.Printf("id:%d, matchIndex: %d", id, idx)
+			if idx >= N {
+				cnt += 1
+			}
+		}
+		if cnt > len(s.raftAddrs)/2-1 {
+			log.Printf("[Server %d]cnt=%d, Update commitIndex to %d\n", s.id, cnt, N)
+			s.commitIndex = N
+			break
+		}
+	}
+
 	for s.lastApplied < s.commitIndex {
 		s.lastApplied++
 		entry := s.log[s.lastApplied]
@@ -256,21 +272,6 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 			} else {
 				break
 			}
-		}
-	}
-
-	for N := int64(len(s.log) - 1); N > s.commitIndex; N-- {
-		cnt := 0
-		for id, idx := range s.matchIndex {
-			log.Printf("id:%d, matchIndex: %d", id, idx)
-			if idx >= N {
-				cnt += 1
-			}
-		}
-		if cnt > len(s.raftAddrs)/2-1 {
-			log.Printf("[Server %d]cnt=%d, Update commitIndex to %d\n", s.id, cnt, N)
-			s.commitIndex = N
-			break
 		}
 	}
 
