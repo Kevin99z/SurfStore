@@ -95,6 +95,13 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 			success = success || res.Flag
 		}
 	}
+	for s.lastApplied < s.commitIndex {
+		s.lastApplied++
+		entry := s.log[s.lastApplied]
+		filemeta := entry.FileMetaData
+		fmt.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
+		s.metaStore.UpdateFile(ctx, filemeta)
+	}
 	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, nil)
 	fileMetaData, ok := fileInfoMap.FileInfoMap[filemeta.Filename]
 	version := int32(-1)
@@ -265,13 +272,7 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 			break
 		}
 	}
-	for s.lastApplied < s.commitIndex {
-		s.lastApplied++
-		entry := s.log[s.lastApplied]
-		filemeta := entry.FileMetaData
-		fmt.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
-		s.metaStore.UpdateFile(ctx, filemeta)
-	}
+
 	return &Success{Flag: succCnt > len(s.raftAddrs)/2-1}, nil
 }
 
@@ -307,7 +308,7 @@ func (s *RaftSurfstore) GetInternalState(ctx context.Context, empty *emptypb.Emp
 		IsLeader: s.isLeader,
 		Term:     s.term,
 		Log:      s.log,
-		MetaMap:  &FileInfoMap{FileInfoMap: map[string]*FileMetaData{}},
+		MetaMap:  fileInfoMap,
 	}
 	s.isLeaderMutex.RUnlock()
 

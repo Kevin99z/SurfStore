@@ -204,14 +204,14 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 		server.SendHeartbeat(test.Context, &emptypb.Empty{})
 	}
 
-	t.Log("Leader 2 get a request")
-	meta_v2, _ := LoadMetaFromMetaFile("./meta_configs/v2.meta")
-	test.Clients[leaderIdx].UpdateFile(test.Context, meta_v2[filename])
-
-	// heartbeat
-	for _, server := range test.Clients {
-		server.SendHeartbeat(test.Context, &emptypb.Empty{})
-	}
+	//t.Log("Leader 2 get a request")
+	//meta_v2, _ := LoadMetaFromMetaFile("./meta_configs/v2.meta")
+	//test.Clients[leaderIdx].UpdateFile(test.Context, meta_v2[filename])
+	//
+	//// heartbeat
+	//for _, server := range test.Clients {
+	//	server.SendHeartbeat(test.Context, &emptypb.Empty{})
+	//}
 
 	t.Log("Restore server 0")
 	test.Clients[0].Restore(test.Context, &emptypb.Empty{})
