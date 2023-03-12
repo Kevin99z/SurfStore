@@ -88,7 +88,11 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 	})
 	success := false
 	for !success {
-		res, _ := s.SendHeartbeat(ctx, nil)
+		res, err := s.SendHeartbeat(ctx, nil)
+		if err == ERR_NOT_LEADER {
+			s.isLeader = false
+			break
+		}
 		success = success || res.Flag
 	}
 	return s.metaStore.UpdateFile(ctx, filemeta)
@@ -166,7 +170,7 @@ func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Succe
 }
 
 func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
-	fmt.Println("Sending heartbeat")
+	//fmt.Println("Sending heartbeat")
 	if s.isCrashed {
 		return nil, ERR_SERVER_CRASHED
 	}
@@ -175,17 +179,18 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 	}
 	succCnt := 0
 	for i, addr := range s.raftAddrs {
+		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
 		if int64(i) == s.id {
 			continue
 		}
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
 		if err != nil {
-			return nil, nil
+			fmt.Printf("Failed dialing server\n")
+			continue
 		}
 		c := NewRaftSurfstoreClient(conn)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
 		defer cancel()
-		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
 		finished := false
 		for !finished {
 			prevLogIdx := s.nextIndex[i] - 1
