@@ -6,7 +6,6 @@ import (
 	"google.golang.org/grpc"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	"sync"
-	"time"
 )
 
 type RaftSurfstore struct {
@@ -88,6 +87,12 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 	})
 	success := false
 	for !success {
+		s.isCrashedMutex.RLock()
+		if s.isCrashed {
+			s.isCrashedMutex.RUnlock()
+			return nil, ERR_SERVER_CRASHED
+		}
+		s.isCrashedMutex.RUnlock()
 		res, err := s.SendHeartbeat(ctx, nil)
 		if err == ERR_NOT_LEADER {
 			s.isLeader = false
@@ -108,10 +113,10 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 // of last new entry)
 
 func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInput) (*AppendEntryOutput, error) {
-	fmt.Printf("[Server %d] AppendEntries\n", s.id)
 	if s.isCrashed {
 		return nil, ERR_SERVER_CRASHED
 	}
+	fmt.Printf("[Server %d] AppendEntries\n", s.id)
 	if input.Term < s.term {
 		return &AppendEntryOutput{
 			ServerId: s.id,
@@ -171,14 +176,17 @@ func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Succe
 
 func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
 	//fmt.Println("Sending heartbeat")
-	if s.isCrashed {
-		return nil, ERR_SERVER_CRASHED
-	}
-	if !s.isLeader {
-		return &Success{Flag: false}, nil
-	}
 	succCnt := 0
 	for i, addr := range s.raftAddrs {
+		s.isCrashedMutex.RLock()
+		if s.isCrashed {
+			s.isCrashedMutex.RUnlock()
+			return nil, ERR_SERVER_CRASHED
+		}
+		s.isCrashedMutex.RUnlock()
+		if !s.isLeader {
+			return &Success{Flag: false}, nil
+		}
 		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
 		if int64(i) == s.id {
 			continue
@@ -189,8 +197,6 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 			continue
 		}
 		c := NewRaftSurfstoreClient(conn)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
-		defer cancel()
 		finished := false
 		for !finished {
 			prevLogIdx := s.nextIndex[i] - 1
