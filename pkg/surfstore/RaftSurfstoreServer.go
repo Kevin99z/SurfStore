@@ -83,7 +83,7 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 		Term:         s.term,
 		FileMetaData: filemeta,
 	})
-	//fmt.Printf("[Server %d] append log\n", s.id)
+	fmt.Printf("[Server %d] UpdateFile (new log appended)\n", s.id)
 	success := false
 	for !success {
 		res, err := s.SendHeartbeat(ctx, nil)
