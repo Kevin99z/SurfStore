@@ -119,7 +119,7 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 		s.isLeader = false
 	}
 
-	if len(s.log) <= int(input.PrevLogIndex) || (input.PrevLogIndex >= 0 && s.log[input.PrevLogIndex].Term != input.PrevLogTerm) {
+	if len(s.log) <= int(input.PrevLogIndex) || int(input.PrevLogIndex) >= len(s.log) || (input.PrevLogIndex >= 0 && s.log[input.PrevLogIndex].Term != input.PrevLogTerm) {
 		return &AppendEntryOutput{
 			ServerId: s.id,
 			Term:     s.term,
@@ -183,29 +183,39 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 			return nil, nil
 		}
 		c := NewRaftSurfstoreClient(conn)
-		prevLogIdx := s.nextIndex[i] - 1
-		var prevLogTerm int64
-		if prevLogIdx >= 0 {
-			prevLogTerm = s.log[prevLogIdx].Term
-		}
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
 		defer cancel()
 		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
-		resp, err := c.AppendEntries(ctx, &AppendEntryInput{
-			Term:         s.term,
-			PrevLogIndex: prevLogIdx,
-			PrevLogTerm:  prevLogTerm,
-			Entries:      s.log[prevLogIdx+1:],
-			LeaderCommit: s.commitIndex,
-		})
-		if err == nil {
-			if resp.Success {
-				//fmt.Printf("[Server %d] server %d is alive\n", s.id, i)
-				succCnt += 1
-				s.matchIndex[i] = resp.MatchedIndex
+		finished := false
+		for !finished {
+			prevLogIdx := s.nextIndex[i] - 1
+			var prevLogTerm int64
+			if prevLogIdx >= 0 {
+				prevLogTerm = s.log[prevLogIdx].Term
+			}
+
+			resp, err := c.AppendEntries(ctx, &AppendEntryInput{
+				Term:         s.term,
+				PrevLogIndex: prevLogIdx,
+				PrevLogTerm:  prevLogTerm,
+				Entries:      s.log[prevLogIdx+1:],
+				LeaderCommit: s.commitIndex,
+			})
+			if err == nil {
+				if resp.Success {
+					//fmt.Printf("[Server %d] server %d is alive\n", s.id, i)
+					succCnt += 1
+					s.matchIndex[i] = resp.MatchedIndex
+					finished = true
+				} else if resp.Term > s.term {
+					s.isLeader = false
+					return &Success{Flag: false}, ERR_NOT_LEADER
+				} else {
+					s.nextIndex[i] -= 1
+					continue
+				}
 			} else {
-				s.nextIndex[i] -= 1
+				break
 			}
 		}
 	}
