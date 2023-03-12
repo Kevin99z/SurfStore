@@ -95,8 +95,13 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 			success = success || res.Flag
 		}
 	}
-	fmt.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
-	return s.metaStore.UpdateFile(ctx, filemeta)
+	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, nil)
+	fileMetaData, ok := fileInfoMap.FileInfoMap[filemeta.Filename]
+	version := int32(-1)
+	if ok {
+		version = fileMetaData.Version
+	}
+	return &Version{Version: version}, nil
 }
 
 // 1. Reply false if term < currentTerm (§5.1)
@@ -112,7 +117,6 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 	if s.isCrashed {
 		return nil, ERR_SERVER_CRASHED
 	}
-	fmt.Printf("[Server %d] AppendEntries\n", s.id)
 	if input.Term < s.term {
 		return &AppendEntryOutput{
 			ServerId: s.id,
@@ -123,6 +127,7 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 		s.term = input.Term
 		s.isLeader = false
 	}
+	fmt.Printf("[Server %d] AppendEntries\n", s.id)
 
 	if len(s.log) <= int(input.PrevLogIndex) || (input.PrevLogIndex >= 0 && s.log[input.PrevLogIndex].Term != input.PrevLogTerm) {
 		return &AppendEntryOutput{
@@ -163,9 +168,9 @@ func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Succe
 	s.isLeader = true
 	s.term += 1
 	for i := 0; i < len(s.raftAddrs); i++ {
-		if int64(i) == s.id {
-			continue
-		}
+		//if int64(i) == s.id {
+		//	continue
+		//}
 		s.nextIndex[i] = s.commitIndex + 1
 		s.matchIndex[i] = -1
 	}
@@ -248,16 +253,24 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 
 	for N := int64(len(s.log) - 1); N > s.commitIndex; N-- {
 		cnt := 0
-		for _, idx := range s.matchIndex {
+		for id, idx := range s.matchIndex {
+			fmt.Printf("id:%d, matchIndex: %d", id, idx)
 			if idx >= N {
 				cnt += 1
 			}
 		}
 		if cnt > len(s.raftAddrs)/2-1 {
-			fmt.Printf("[Server %d] Update commitIndex to %d\n", s.id, N)
+			fmt.Printf("[Server %d]cnt=%d, Update commitIndex to %d\n", s.id, cnt, N)
 			s.commitIndex = N
 			break
 		}
+	}
+	for s.lastApplied < s.commitIndex {
+		s.lastApplied++
+		entry := s.log[s.lastApplied]
+		filemeta := entry.FileMetaData
+		fmt.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
+		s.metaStore.UpdateFile(ctx, filemeta)
 	}
 	return &Success{Flag: succCnt > len(s.raftAddrs)/2-1}, nil
 }
@@ -268,7 +281,7 @@ func (s *RaftSurfstore) Crash(ctx context.Context, _ *emptypb.Empty) (*Success, 
 	s.isCrashedMutex.Lock()
 	s.isCrashed = true
 	s.isCrashedMutex.Unlock()
-	fmt.Printf("[server %d] Crashed", s.id)
+	fmt.Printf("[server %d] Crashed\n", s.id)
 	return &Success{Flag: true}, nil
 }
 
@@ -276,7 +289,7 @@ func (s *RaftSurfstore) Restore(ctx context.Context, _ *emptypb.Empty) (*Success
 	s.isCrashedMutex.Lock()
 	s.isCrashed = false
 	s.isCrashedMutex.Unlock()
-	fmt.Printf("[server %d] Restored", s.id)
+	fmt.Printf("[server %d] Restored\n", s.id)
 	return &Success{Flag: true}, nil
 }
 

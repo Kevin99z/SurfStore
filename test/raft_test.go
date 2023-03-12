@@ -191,7 +191,7 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 	go test.Clients[leaderIdx].UpdateFile(test.Context, meta_v1[filename])
 	time.Sleep(time.Millisecond * 5)
 	test.Clients[leaderIdx].Crash(test.Context, &emptypb.Empty{})
-	//time.Sleep(time.Millisecond * 5)
+	time.Sleep(time.Millisecond * 50)
 	test.Clients[1].Restore(test.Context, &emptypb.Empty{})
 	test.Clients[2].Restore(test.Context, &emptypb.Empty{})
 	for _, server := range test.Clients {
