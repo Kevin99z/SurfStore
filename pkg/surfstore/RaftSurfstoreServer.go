@@ -307,7 +307,7 @@ func (s *RaftSurfstore) GetInternalState(ctx context.Context, empty *emptypb.Emp
 		IsLeader: s.isLeader,
 		Term:     s.term,
 		Log:      s.log,
-		MetaMap:  fileInfoMap,
+		MetaMap:  &FileInfoMap{FileInfoMap: map[string]*FileMetaData{}},
 	}
 	s.isLeaderMutex.RUnlock()
 
