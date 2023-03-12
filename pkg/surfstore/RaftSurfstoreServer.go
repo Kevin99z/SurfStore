@@ -2,9 +2,9 @@ package surfstore
 
 import (
 	context "context"
-	"fmt"
 	"google.golang.org/grpc"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	"log"
 	"sync"
 )
 
@@ -35,7 +35,7 @@ func (s *RaftSurfstore) GetFileInfoMap(ctx context.Context, empty *emptypb.Empty
 	if !s.isLeader {
 		return nil, ERR_NOT_LEADER
 	}
-	fmt.Printf("[Server %d] GetFileInfoMap\n", s.id)
+	log.Printf("[Server %d] GetFileInfoMap\n", s.id)
 	success := false
 	for !success {
 		res, _ := s.SendHeartbeat(ctx, nil)
@@ -83,12 +83,12 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 		Term:         s.term,
 		FileMetaData: filemeta,
 	})
-	fmt.Printf("[Server %d] UpdateFile (new log appended)\n", s.id)
+	log.Printf("[Server %d] UpdateFile (new log appended)\n", s.id)
 	success := false
 	for !success {
 		res, err := s.SendHeartbeat(ctx, nil)
 		if err != nil {
-			fmt.Printf("[Server %d] UpdateFile exit because %s\n", s.id, err)
+			log.Printf("[Server %d] UpdateFile exit because %s\n", s.id, err)
 			return nil, err
 		}
 		if res != nil {
@@ -99,7 +99,7 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 		s.lastApplied++
 		entry := s.log[s.lastApplied]
 		filemeta := entry.FileMetaData
-		fmt.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
+		log.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
 		s.metaStore.UpdateFile(ctx, filemeta)
 	}
 	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, nil)
@@ -134,7 +134,7 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 		s.term = input.Term
 		s.isLeader = false
 	}
-	fmt.Printf("[Server %d] AppendEntries\n", s.id)
+	log.Printf("[Server %d] AppendEntries\n", s.id)
 
 	if len(s.log) <= int(input.PrevLogIndex) || (input.PrevLogIndex >= 0 && s.log[input.PrevLogIndex].Term != input.PrevLogTerm) {
 		return &AppendEntryOutput{
@@ -154,7 +154,7 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 		s.lastApplied++
 		entry := s.log[s.lastApplied]
 		filemeta := entry.FileMetaData
-		fmt.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
+		log.Printf("[Server %d] Commit %s (version %d)\n", s.id, filemeta.Filename, filemeta.Version)
 		s.metaStore.UpdateFile(ctx, filemeta)
 	}
 
@@ -167,7 +167,7 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 }
 
 func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
-	fmt.Printf("[Server %d] Set as Leader\n", s.id)
+	log.Printf("[Server %d] Set as Leader\n", s.id)
 	if s.isCrashed {
 		return nil, ERR_SERVER_CRASHED
 	}
@@ -201,20 +201,20 @@ func (s *RaftSurfstore) CheckIsValidLeader() (bool, error) {
 	return true, nil
 }
 func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
-	//fmt.Println("Sending heartbeat")
+	//log.Println("Sending heartbeat")
 	succCnt := 0
 	for i, addr := range s.raftAddrs {
 		ok, err := s.CheckIsValidLeader()
 		if !ok {
 			return &Success{Flag: false}, err
 		}
-		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
+		log.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
 		if int64(i) == s.id {
 			continue
 		}
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
 		if err != nil {
-			fmt.Printf("Failed dialing server\n")
+			log.Printf("Failed dialing server\n")
 			continue
 		}
 		c := NewRaftSurfstoreClient(conn)
@@ -239,7 +239,7 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 			})
 			if err == nil {
 				if resp.Success {
-					//fmt.Printf("[Server %d] server %d is alive\n", s.id, i)
+					//log.Printf("[Server %d] server %d is alive\n", s.id, i)
 					succCnt += 1
 					s.matchIndex[i] = resp.MatchedIndex
 					finished = true
@@ -261,13 +261,13 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 	for N := int64(len(s.log) - 1); N > s.commitIndex; N-- {
 		cnt := 0
 		for id, idx := range s.matchIndex {
-			fmt.Printf("id:%d, matchIndex: %d", id, idx)
+			log.Printf("id:%d, matchIndex: %d", id, idx)
 			if idx >= N {
 				cnt += 1
 			}
 		}
 		if cnt > len(s.raftAddrs)/2-1 {
-			fmt.Printf("[Server %d]cnt=%d, Update commitIndex to %d\n", s.id, cnt, N)
+			log.Printf("[Server %d]cnt=%d, Update commitIndex to %d\n", s.id, cnt, N)
 			s.commitIndex = N
 			break
 		}
@@ -282,7 +282,7 @@ func (s *RaftSurfstore) Crash(ctx context.Context, _ *emptypb.Empty) (*Success, 
 	s.isCrashedMutex.Lock()
 	s.isCrashed = true
 	s.isCrashedMutex.Unlock()
-	fmt.Printf("[server %d] Crashed\n", s.id)
+	log.Printf("[server %d] Crashed\n", s.id)
 	return &Success{Flag: true}, nil
 }
 
@@ -290,20 +290,20 @@ func (s *RaftSurfstore) Restore(ctx context.Context, _ *emptypb.Empty) (*Success
 	s.isCrashedMutex.Lock()
 	s.isCrashed = false
 	s.isCrashedMutex.Unlock()
-	fmt.Printf("[server %d] Restored\n", s.id)
+	log.Printf("[server %d] Restored\n", s.id)
 	return &Success{Flag: true}, nil
 }
 
 func (s *RaftSurfstore) GetInternalState(ctx context.Context, empty *emptypb.Empty) (*RaftInternalState, error) {
 	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, empty)
 	s.isLeaderMutex.RLock()
-	fmt.Printf("[Server %d] server has %d logs\n", s.id, len(s.log))
+	log.Printf("[Server %d] server has %d logs\n", s.id, len(s.log))
 	//for _, op := range s.log {
 	//	filemeta := op.FileMetaData
-	//	fmt.Println("\t", filemeta.Filename, filemeta.Version)
+	//	log.Println("\t", filemeta.Filename, filemeta.Version)
 	//}
-	PrintMetaMap(fileInfoMap.FileInfoMap)
-	fmt.Println()
+	//PrintMetaMap(fileInfoMap.FileInfoMap)
+	log.Println()
 	state := &RaftInternalState{
 		IsLeader: s.isLeader,
 		Term:     s.term,
