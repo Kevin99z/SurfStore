@@ -85,15 +85,13 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 	})
 	//fmt.Printf("[Server %d] append log\n", s.id)
 	success := false
-	for !success {
-		res, err := s.SendHeartbeat(ctx, nil)
-		if err != nil {
-			fmt.Printf("[Server %d] UpdateFile exit because server becomes not valid\n", s.id)
-			return nil, err
-		}
-		if res != nil {
-			success = success || res.Flag
-		}
+	res, err := s.SendHeartbeat(ctx, nil)
+	if err != nil {
+		fmt.Printf("[Server %d] UpdateFile exit because server becomes not valid\n", s.id)
+		return nil, err
+	}
+	if res != nil {
+		success = success || res.Flag
 	}
 	return s.metaStore.UpdateFile(ctx, filemeta)
 }
