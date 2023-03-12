@@ -85,16 +85,16 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 	})
 	fmt.Printf("[Server %d] UpdateFile (new log appended)\n", s.id)
 	success := false
-	//for !success {
-	res, err := s.SendHeartbeat(ctx, nil)
-	if err != nil {
-		fmt.Printf("[Server %d] UpdateFile exit because %s\n", s.id, err)
-		return nil, err
+	for !success {
+		res, err := s.SendHeartbeat(ctx, nil)
+		if err != nil {
+			fmt.Printf("[Server %d] UpdateFile exit because %s\n", s.id, err)
+			return nil, err
+		}
+		if res != nil {
+			success = success || res.Flag
+		}
 	}
-	if res != nil {
-		success = success || res.Flag
-	}
-	//}
 	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, nil)
 	fileMetaData, ok := fileInfoMap.FileInfoMap[filemeta.Filename]
 	version := int32(-1)
