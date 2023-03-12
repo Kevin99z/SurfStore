@@ -2,7 +2,6 @@ package surfstore
 
 import (
 	context "context"
-	"fmt"
 	"google.golang.org/grpc"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	"log"
@@ -284,7 +283,7 @@ func (s *RaftSurfstore) Crash(ctx context.Context, _ *emptypb.Empty) (*Success, 
 	s.isCrashedMutex.Lock()
 	s.isCrashed = true
 	s.isCrashedMutex.Unlock()
-	log.Printf("[server %d] Crashed\n", s.id)
+
 	return &Success{Flag: true}, nil
 }
 
@@ -292,20 +291,13 @@ func (s *RaftSurfstore) Restore(ctx context.Context, _ *emptypb.Empty) (*Success
 	s.isCrashedMutex.Lock()
 	s.isCrashed = false
 	s.isCrashedMutex.Unlock()
-	log.Printf("[server %d] Restored\n", s.id)
+
 	return &Success{Flag: true}, nil
 }
 
 func (s *RaftSurfstore) GetInternalState(ctx context.Context, empty *emptypb.Empty) (*RaftInternalState, error) {
 	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, empty)
 	s.isLeaderMutex.RLock()
-	fmt.Printf("[Server %d] server has %d logs\n", s.id, len(s.log))
-	for _, op := range s.log {
-		filemeta := op.FileMetaData
-		fmt.Println("\t", filemeta.Filename, filemeta.Version)
-	}
-	PrintMetaMap(fileInfoMap.FileInfoMap)
-	fmt.Println()
 	state := &RaftInternalState{
 		IsLeader: s.isLeader,
 		Term:     s.term,
