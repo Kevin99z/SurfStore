@@ -2,6 +2,7 @@ package surfstore
 
 import (
 	context "context"
+	"fmt"
 	"google.golang.org/grpc"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	"log"
@@ -297,13 +298,13 @@ func (s *RaftSurfstore) Restore(ctx context.Context, _ *emptypb.Empty) (*Success
 func (s *RaftSurfstore) GetInternalState(ctx context.Context, empty *emptypb.Empty) (*RaftInternalState, error) {
 	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, empty)
 	s.isLeaderMutex.RLock()
-	log.Printf("[Server %d] server has %d logs\n", s.id, len(s.log))
-	//for _, op := range s.log {
-	//	filemeta := op.FileMetaData
-	//	log.Println("\t", filemeta.Filename, filemeta.Version)
-	//}
-	//PrintMetaMap(fileInfoMap.FileInfoMap)
-	log.Println()
+	fmt.Printf("[Server %d] server has %d logs\n", s.id, len(s.log))
+	for _, op := range s.log {
+		filemeta := op.FileMetaData
+		fmt.Println("\t", filemeta.Filename, filemeta.Version)
+	}
+	PrintMetaMap(fileInfoMap.FileInfoMap)
+	fmt.Println()
 	state := &RaftInternalState{
 		IsLeader: s.isLeader,
 		Term:     s.term,
