@@ -224,11 +224,14 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 	state1, _ := test.Clients[1].GetInternalState(test.Context, &emptypb.Empty{})
 	for i, server := range test.Clients {
 		state, err := server.GetInternalState(test.Context, &emptypb.Empty{})
-		if err != nil {
+		if state == nil || err != nil {
 			t.Fatalf("Fail fetching state of server %d", i)
 		}
-		if !SameMeta(state1.MetaMap.FileInfoMap, state.MetaMap.FileInfoMap) {
+		if i > 0 && state != nil && !SameMeta(state1.MetaMap.FileInfoMap, state.MetaMap.FileInfoMap) {
 			t.Fatalf("Incorrect File meta")
+		}
+		if i == 0 && len(state.Log) != 1 {
+			t.Fatalf("Server 0 should have log of length 1")
 		}
 
 	}

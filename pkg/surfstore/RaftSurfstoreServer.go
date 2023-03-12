@@ -75,11 +75,9 @@ func (s *RaftSurfstore) GetBlockStoreAddrs(ctx context.Context, empty *emptypb.E
 }
 
 func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) (*Version, error) {
-	if s.isCrashed {
-		return nil, ERR_SERVER_CRASHED
-	}
-	if !s.isLeader {
-		return nil, ERR_NOT_LEADER
+	ok, err := s.CheckIsValidLeader()
+	if !ok {
+		return nil, err
 	}
 	s.log = append(s.log, &UpdateOperation{
 		Term:         s.term,
@@ -88,20 +86,10 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 	//fmt.Printf("[Server %d] append log\n", s.id)
 	success := false
 	for !success {
-		s.isCrashedMutex.RLock()
-		if s.isCrashed {
-			fmt.Printf("[Server %d] UpdateFile exit because server crashed\n", s.id)
-			s.isCrashedMutex.RUnlock()
-			return nil, ERR_SERVER_CRASHED
-		}
-		s.isCrashedMutex.RUnlock()
 		res, err := s.SendHeartbeat(ctx, nil)
-		if err == ERR_NOT_LEADER {
-			fmt.Printf("[Server %d] UpdateFile exit because server is not leader\n", s.id)
-			s.isLeaderMutex.Lock()
-			s.isLeader = false
-			s.isLeaderMutex.Unlock()
-			return nil, ERR_NOT_LEADER
+		if err != nil {
+			fmt.Printf("[Server %d] UpdateFile exit because server becomes not valid\n", s.id)
+			return nil, err
 		}
 		if res != nil {
 			success = success || res.Flag
@@ -181,22 +169,29 @@ func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Succe
 	return &Success{Flag: true}, nil
 }
 
+func (s *RaftSurfstore) CheckIsValidLeader() (bool, error) {
+	s.isCrashedMutex.RLock()
+	if s.isCrashed {
+		s.isCrashedMutex.RUnlock()
+		return false, ERR_SERVER_CRASHED
+	}
+	s.isCrashedMutex.RUnlock()
+	s.isLeaderMutex.RLock()
+	if !s.isLeader {
+		s.isLeaderMutex.RUnlock()
+		return false, ERR_NOT_LEADER
+	}
+	s.isLeaderMutex.RUnlock()
+	return true, nil
+}
 func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
 	//fmt.Println("Sending heartbeat")
 	succCnt := 0
 	for i, addr := range s.raftAddrs {
-		s.isCrashedMutex.RLock()
-		if s.isCrashed {
-			s.isCrashedMutex.RUnlock()
-			return &Success{Flag: false}, ERR_SERVER_CRASHED
+		ok, err := s.CheckIsValidLeader()
+		if !ok {
+			return &Success{Flag: false}, err
 		}
-		s.isCrashedMutex.RUnlock()
-		s.isLeaderMutex.RLock()
-		if !s.isLeader {
-			s.isLeaderMutex.RUnlock()
-			return &Success{Flag: false}, ERR_NOT_LEADER
-		}
-		s.isLeaderMutex.RUnlock()
 		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
 		if int64(i) == s.id {
 			continue
@@ -209,6 +204,10 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 		c := NewRaftSurfstoreClient(conn)
 		finished := false
 		for !finished {
+			ok, err := s.CheckIsValidLeader()
+			if !ok {
+				return &Success{Flag: false}, err
+			}
 			prevLogIdx := s.nextIndex[i] - 1
 			var prevLogTerm int64
 			if prevLogIdx >= 0 {
@@ -229,7 +228,9 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 					s.matchIndex[i] = resp.MatchedIndex
 					finished = true
 				} else if resp.Term > s.term {
+					s.isLeaderMutex.Lock()
 					s.isLeader = false
+					s.isLeaderMutex.Unlock()
 					return &Success{Flag: false}, ERR_NOT_LEADER
 				} else {
 					s.nextIndex[i] -= 1
