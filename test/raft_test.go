@@ -191,7 +191,7 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 	go test.Clients[leaderIdx].UpdateFile(test.Context, meta_v1[filename])
 	time.Sleep(time.Millisecond * 5)
 	test.Clients[leaderIdx].Crash(test.Context, &emptypb.Empty{})
-
+	//time.Sleep(time.Millisecond * 5)
 	test.Clients[1].Restore(test.Context, &emptypb.Empty{})
 	test.Clients[2].Restore(test.Context, &emptypb.Empty{})
 	for _, server := range test.Clients {
@@ -200,21 +200,21 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 
 	leaderIdx = 1
 	test.Clients[leaderIdx].SetLeader(test.Context, &emptypb.Empty{})
-	//for _, server := range test.Clients {
-	//	server.SendHeartbeat(test.Context, &emptypb.Empty{})
-	//}
+	for _, server := range test.Clients {
+		server.SendHeartbeat(test.Context, &emptypb.Empty{})
+	}
 
-	//t.Log("Leader 2 get a request")
-	//meta_v2, _ := LoadMetaFromMetaFile("./meta_configs/v2.meta")
-	//test.Clients[leaderIdx].UpdateFile(test.Context, meta_v2[filename])
+	t.Log("Leader 2 get a request")
+	meta_v2, _ := LoadMetaFromMetaFile("./meta_configs/v2.meta")
+	test.Clients[leaderIdx].UpdateFile(test.Context, meta_v2[filename])
 
 	// heartbeat
 	for _, server := range test.Clients {
 		server.SendHeartbeat(test.Context, &emptypb.Empty{})
 	}
 
-	//t.Log("Restore server 0")
-	//test.Clients[0].Restore(test.Context, &emptypb.Empty{})
+	t.Log("Restore server 0")
+	test.Clients[0].Restore(test.Context, &emptypb.Empty{})
 
 	t.Log("sending heartbeats")
 	for _, server := range test.Clients {
@@ -227,12 +227,12 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 		if state == nil || err != nil {
 			t.Fatalf("Fail fetching state of server %d", i)
 		}
-		if i > 0 && state != nil && !SameMeta(state1.MetaMap.FileInfoMap, state.MetaMap.FileInfoMap) {
+		if state != nil && !SameMeta(state1.MetaMap.FileInfoMap, state.MetaMap.FileInfoMap) {
 			t.Fatalf("Incorrect File meta")
 		}
-		if i == 0 && len(state.Log) != 1 {
-			t.Fatalf("Server 0 should have log of length 1")
-		}
+		//if i == 0 && len(state.Log) != 1 {
+		//	t.Fatalf("Server 0 should have log of length 1")
+		//}
 
 	}
 

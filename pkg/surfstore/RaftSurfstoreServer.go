@@ -88,7 +88,7 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 	for !success {
 		res, err := s.SendHeartbeat(ctx, nil)
 		if err != nil {
-			fmt.Printf("[Server %d] UpdateFile exit because server becomes not valid\n", s.id)
+			fmt.Printf("[Server %d] UpdateFile exit because %s\n", s.id, err)
 			return nil, err
 		}
 		if res != nil {
@@ -152,6 +152,7 @@ func (s *RaftSurfstore) AppendEntries(ctx context.Context, input *AppendEntryInp
 }
 
 func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Success, error) {
+	fmt.Printf("[Server %d] Set as Leader\n", s.id)
 	if s.isCrashed {
 		return nil, ERR_SERVER_CRASHED
 	}
@@ -163,7 +164,7 @@ func (s *RaftSurfstore) SetLeader(ctx context.Context, _ *emptypb.Empty) (*Succe
 			continue
 		}
 		s.nextIndex[i] = s.commitIndex + 1
-		s.matchIndex[i] = 0
+		s.matchIndex[i] = -1
 	}
 	s.isLeaderMutex.Unlock()
 	return &Success{Flag: true}, nil
@@ -278,6 +279,13 @@ func (s *RaftSurfstore) Restore(ctx context.Context, _ *emptypb.Empty) (*Success
 func (s *RaftSurfstore) GetInternalState(ctx context.Context, empty *emptypb.Empty) (*RaftInternalState, error) {
 	fileInfoMap, _ := s.metaStore.GetFileInfoMap(ctx, empty)
 	s.isLeaderMutex.RLock()
+	fmt.Printf("[Server %d] server has %d logs\n", s.id, len(s.log))
+	//for _, op := range s.log {
+	//	filemeta := op.FileMetaData
+	//	fmt.Println("\t", filemeta.Filename, filemeta.Version)
+	//}
+	PrintMetaMap(fileInfoMap.FileInfoMap)
+	fmt.Println()
 	state := &RaftInternalState{
 		IsLeader: s.isLeader,
 		Term:     s.term,
