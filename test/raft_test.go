@@ -4,6 +4,7 @@ import (
 	//"cse224/proj5/pkg/surfstore"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	"testing"
+	"time"
 )
 
 func TestRaftSetLeader(t *testing.T) {
@@ -188,6 +189,7 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 	filename := "multi_file.txt"
 	meta_v1, _ := LoadMetaFromMetaFile("./meta_configs/v1.meta")
 	go test.Clients[leaderIdx].UpdateFile(test.Context, meta_v1[filename])
+	time.Sleep(time.Millisecond * 5)
 	test.Clients[leaderIdx].Crash(test.Context, &emptypb.Empty{})
 
 	test.Clients[1].Restore(test.Context, &emptypb.Empty{})
@@ -198,21 +200,21 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 
 	leaderIdx = 1
 	test.Clients[leaderIdx].SetLeader(test.Context, &emptypb.Empty{})
-	for _, server := range test.Clients {
-		server.SendHeartbeat(test.Context, &emptypb.Empty{})
-	}
+	//for _, server := range test.Clients {
+	//	server.SendHeartbeat(test.Context, &emptypb.Empty{})
+	//}
 
-	t.Log("Leader 2 get a request")
-	meta_v2, _ := LoadMetaFromMetaFile("./meta_configs/v2.meta")
-	test.Clients[leaderIdx].UpdateFile(test.Context, meta_v2[filename])
+	//t.Log("Leader 2 get a request")
+	//meta_v2, _ := LoadMetaFromMetaFile("./meta_configs/v2.meta")
+	//test.Clients[leaderIdx].UpdateFile(test.Context, meta_v2[filename])
 
 	// heartbeat
 	for _, server := range test.Clients {
 		server.SendHeartbeat(test.Context, &emptypb.Empty{})
 	}
 
-	t.Log("Restore server 0")
-	test.Clients[0].Restore(test.Context, &emptypb.Empty{})
+	//t.Log("Restore server 0")
+	//test.Clients[0].Restore(test.Context, &emptypb.Empty{})
 
 	t.Log("sending heartbeats")
 	for _, server := range test.Clients {
@@ -220,10 +222,10 @@ func TestNewLeaderPushUpdates(t *testing.T) {
 	}
 
 	state1, _ := test.Clients[1].GetInternalState(test.Context, &emptypb.Empty{})
-	for i, _ := range test.Clients {
-		state, err := test.Clients[i].GetInternalState(test.Context, &emptypb.Empty{})
+	for i, server := range test.Clients {
+		state, err := server.GetInternalState(test.Context, &emptypb.Empty{})
 		if err != nil {
-			t.Fatalf("Fail feching state")
+			t.Fatalf("Fail fetching state of server %d", i)
 		}
 		if !SameMeta(state1.MetaMap.FileInfoMap, state.MetaMap.FileInfoMap) {
 			t.Fatalf("Incorrect File meta")

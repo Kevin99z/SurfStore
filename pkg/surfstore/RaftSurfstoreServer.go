@@ -85,20 +85,27 @@ func (s *RaftSurfstore) UpdateFile(ctx context.Context, filemeta *FileMetaData) 
 		Term:         s.term,
 		FileMetaData: filemeta,
 	})
+	//fmt.Printf("[Server %d] append log\n", s.id)
 	success := false
 	for !success {
 		s.isCrashedMutex.RLock()
 		if s.isCrashed {
+			fmt.Printf("[Server %d] UpdateFile exit because server crashed\n", s.id)
 			s.isCrashedMutex.RUnlock()
 			return nil, ERR_SERVER_CRASHED
 		}
 		s.isCrashedMutex.RUnlock()
 		res, err := s.SendHeartbeat(ctx, nil)
 		if err == ERR_NOT_LEADER {
+			fmt.Printf("[Server %d] UpdateFile exit because server is not leader\n", s.id)
+			s.isLeaderMutex.Lock()
 			s.isLeader = false
-			break
+			s.isLeaderMutex.Unlock()
+			return nil, ERR_NOT_LEADER
 		}
-		success = success || res.Flag
+		if res != nil {
+			success = success || res.Flag
+		}
 	}
 	return s.metaStore.UpdateFile(ctx, filemeta)
 }
@@ -181,12 +188,15 @@ func (s *RaftSurfstore) SendHeartbeat(ctx context.Context, _ *emptypb.Empty) (*S
 		s.isCrashedMutex.RLock()
 		if s.isCrashed {
 			s.isCrashedMutex.RUnlock()
-			return nil, ERR_SERVER_CRASHED
+			return &Success{Flag: false}, ERR_SERVER_CRASHED
 		}
 		s.isCrashedMutex.RUnlock()
+		s.isLeaderMutex.RLock()
 		if !s.isLeader {
-			return &Success{Flag: false}, nil
+			s.isLeaderMutex.RUnlock()
+			return &Success{Flag: false}, ERR_NOT_LEADER
 		}
+		s.isLeaderMutex.RUnlock()
 		fmt.Printf("[Server %d] Sending heartbeat to server %d\n", s.id, i)
 		if int64(i) == s.id {
 			continue
