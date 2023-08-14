@@ -1,90 +1,36 @@
-# Instructions to extend project 4
+# Surfstore
 
-1. Make a copy of your solution if you want to:
-```console
-mkdir proj5
-cp -r proj4/* proj5
-cd proj5
-```
+## Overview
 
-2. Rename all module paths from "proj4" to "proj5" (you may have more that are not shown here)
-```console
-$ grep -r proj4 ./
-cmd/SurfstoreServerExec/main.go:        "cse224/proj4/pkg/surfstore"
-cmd/SurfstoreClientExec/main.go:        "cse224/proj4/pkg/surfstore"
-go.mod:module cse224/proj4
-```
+Surfstore is a fault-tolerant MetaStore implementation that leverages [the Raft consensus algorithm](https://raft.github.io). It consists of multiple RaftSurfstoreServers that communicate with each other via GRPC to ensure consistency and reliability.
 
-3. Copy over the given test cases
-```console
-mkdir test
-cp -r /path/to/proj5/starter-code/test/* test/
-```
+## Features
 
-4. Copy over the Makefile and example config
-```console
-cp /path/to/proj5/starter-code/Makefile .
-cp /path/to/proj5/starter-code/example_config.txt .
-```
-
-5. Copy over Raft specific files
-```console
-mkdir cmd/SurfstoreRaftServerExec
-cp /path/to/proj5/starter-code/cmd/SurfstoreRaftServerExec/main.go cmd/SurfstoreRaftServerExec/
-cp /path/to/proj5/starter-code/pkg/surfstore/Raft* pkg/surfstore/
-cp /path/to/proj5/starter-code/pkg/surfstore/SurfStore.proto pkg/surfstore/
-```
-
-6. Copy over new client exec program and make changes to the client
-```console
-cp /path/to/proj5/starter-code/cmd/SurfstoreClientExec/main.go cmd/SurfstoreClientExec/
-cp /path/to/proj5/starter-code/cmd/SurfstorePrintBlockMapping/main.go cmd/SurfstorePrintBlockMapping/
-```
-
-The client will need to take a slice of strings instead of a single address. In `pkg/surfstore/SurfstoreRPCClient.go` change the client struct to:
-
-```go
-type RPCClient struct {
-        MetaStoreAddrs []string
-        BaseDir       string
-        BlockSize     int
-}
-```
-
-And change the `NewSurfstoreRPCClient` function to:
-
-```go
-func NewSurfstoreRPCClient(addrs []string, baseDir string, blockSize int) RPCClient {
-        return RPCClient{
-                MetaStoreAddrs: addrs,
-                BaseDir:       baseDir,
-                BlockSize:     blockSize,
-        }
-}
-```
-
-MetaStore functionality is now provided by the RaftSurfstoreServer, so change the MetaStore clients to RaftSurfstoreServer clients:
-
-```go
-c := NewRaftSurfstoreClient(conn)
-```
-
-And since we no longer have the `MetaStoreAddr` field, for now you can change `surfclient.MetaStoreAddr` to `surfclient.MetaStoreAddrs[0]`. You will eventually need to change this so you can find a leader, deal with server crashes, etc. 
-```go
-conn, err := grpc.Dial(surfClient.MetaStoreAddrs[0], grpc.WithInsecure())
-```
+- Fault Tolerance: The system is resilient to crashes and can continue to function as long as a majority of the nodes are operational.
+- Concurrent Client Access: Multiple clients can connect to the SurfStore service simultaneously.
+- Consistent File View: Clients see a consistent set of updates to files.
+- Error Handling: Clients interacting with a non-leader will receive an error message and must retry to find the leader.
+- Scalability: In a real deployment, Surfstore can handle exabytes of data, requiring tens of thousands of BlockStores or more.
 
 
-7. Re-generate the protobuf
-```console
-protoc --proto_path=. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative pkg/surfstore/SurfStore.proto
-```
+## Design
+
+### Server
+Each Surfstore Server is composed of two main services:
+
+- BlockStore: Manages the content of each file, which is divided into chunks or blocks. Each block has a unique identifier, and this service stores and retrieves these blocks.
+- MetaStore: Manages the metadata of files and the entire system. It holds the mapping of filenames to blocks and is aware of available BlockStores, mapping blocks to particular BlockStores.
 
 
-You should now be able to run `make test` and it will fail with the panic messages.
+### Communication
+Servers communicate with each other using GRPC. The leader is responsible for querying a majority quorum of the nodes and responding to client requests.
+Each server is aware of all other possible servers (from the configuration file), and new servers do not dynamically join the cluster.
+Using the protocol, if the leader can query a majority quorum of the nodes, it will reply back to the client with the correct answer. As long as a majority of the nodes are up and not in a crashed state, the clients should be able to interact with the system successfully. 
+When a majority of nodes are in a crashed state, clients should block and not receive a response until a majority are restored. Any clients that interact with a non-leader should get an error message and retry to find the leader.
 
 
-# Makefile
+
+## Usage
 
 Run BlockStore server:
 ```console
