@@ -2,7 +2,7 @@
 
 ## Overview
 
-Surfstore is a fault-tolerant MetaStore implementation that leverages [the Raft consensus algorithm](https://raft.github.io). It consists of multiple RaftSurfstoreServers that communicate with each other via GRPC to ensure consistency and reliability.
+Surfstore is a fault-tolerant distributed storage service that leverages [the Raft consensus algorithm](https://raft.github.io). It consists of multiple Raft Servers that communicate with each other via GRPC to ensure consistency and reliability.
 
 ## Features
 
