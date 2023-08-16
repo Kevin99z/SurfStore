@@ -28,6 +28,8 @@ Each server is aware of all other possible servers (from the configuration file)
 Using the protocol, if the leader can query a majority quorum of the nodes, it will reply back to the client with the correct answer. As long as a majority of the nodes are up and not in a crashed state, the clients should be able to interact with the system successfully. 
 When a majority of nodes are in a crashed state, clients should block and not receive a response until a majority are restored. Any clients that interact with a non-leader should get an error message and retry to find the leader.
 
+### Committing Entries
+When a client sends a command to the leader, the leader is going to log that command in its local log, then issue a two-phase commit operation to its followers. When a majority of those followers approve of the update, the leader can commit the transaction locally, apply the log to its state machine, and send the success response to the client. If the leader failed to get approval from all of the followers (maybe because one or more are crashed), it should keep trying indefinitely. The commit behavior is described in the [Raft paper](https://raft.github.io/raft.pdf), section 5.3
 
 
 ## Usage
